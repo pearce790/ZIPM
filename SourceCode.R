@@ -128,7 +128,7 @@ get_zhat <- function(yzhat,onelessyzhat){
   
   return(zhat)
 }
-EM <- function(N,t,seed=NULL,omega0=NULL,tol=0.0001){
+EM <- function(N,t,seed=NULL,omega0=NULL,tol=0.0001,update_t=FALSE){
   
   if(!is.null(seed)){set.seed(seed)}
   if(is.null(omega0)){
@@ -146,8 +146,9 @@ EM <- function(N,t,seed=NULL,omega0=NULL,tol=0.0001){
   J <- ncol(N)
   
   diff <- Inf
-  while(diff > tol){
-  
+  iter <- 1
+  while(diff > tol & iter < 5000){
+    
     yhat <- get_yhat(N,I,J,pi,epsilon,mu,nu,t)
     yzhat <- get_yzhat(N,I,J,pi,epsilon,mu,nu,t,yhat)
     onelessyzhat <- get_onelessyzhat(N,I,J,pi,epsilon,mu,nu,t,yhat)
@@ -158,10 +159,20 @@ EM <- function(N,t,seed=NULL,omega0=NULL,tol=0.0001){
     (mu_new <- sum(apply(N,2,sum)*yhat)/sum(t*yzhat))
     (nu_new <- sum(apply(N,2,sum)*(1-yhat))/sum(t*(onelessyzhat)))
     
+    if(update_t){
+      for(i in 1:I){
+        t[i] <- optim(par=t[i],fn=function(t){
+          value <- -sum((yhat*zhat[i,])*(-t*mu + N[i,]*log(t*mu))+
+                          ((1-yhat)*zhat[i,])*(-t*nu+N[i,]*log(t*nu))+
+                          log(0^(N[i,]*(1-zhat[i,]))))
+          if(is.infinite(value)){return(-100000)}
+          return(value)
+        },method="L-BFGS-B",lower=.01)$par
+      }
+    }
     
-    
-    if(pi_new == 1 | pi_new == 0){pi_new <- 0.5}
-    if(epsilon_new == 1 | epsilon_new == 0){epsilon_new <- 0.5}
+    if(pi_new == 1 | pi_new == 0 | is.nan(pi_new)){pi_new <- 0.5}
+    if(epsilon_new == 1 | epsilon_new == 0 | is.nan(epsilon_new)){epsilon_new <- 0.5}
     if(is.nan(mu_new)){mu_new <- mean(N/t)+runif(1,0,1)}
     if(is.nan(nu_new)){nu_new <- mean(N/t)+runif(1,0,1)}
     
@@ -170,19 +181,21 @@ EM <- function(N,t,seed=NULL,omega0=NULL,tol=0.0001){
     epsilon <- epsilon_new
     mu <- mu_new
     nu <- nu_new
+    iter <- iter + 1
   }
   
   if(pi <= 0.5){
-    return(list(pi=pi,epsilon=epsilon,mu=mu,nu=nu,theta=mu/nu))
+    return(list(pi=pi,epsilon=epsilon,mu=mu,nu=nu,theta=mu/nu,zhat=zhat,yhat=yhat,t=t))
   }else{
-    return(list(pi=1-pi,epsilon=epsilon,mu=nu,nu=mu,theta=nu/mu))
+    return(list(pi=1-pi,epsilon=epsilon,mu=nu,nu=mu,theta=nu/mu,zhat=zhat,yhat=yhat,t=t))
   }
 }
-EM_multistart <- function(N,t,tol=0.0001,starts=2){
+EM_multistart <- function(N,t,tol=0.0001,starts=2,update_t=FALSE){
   I <- nrow(N)
   J <- ncol(N)
-  res <- replicate(starts,{EM(N,t,tol=tol)})
-  d <- apply(res,2,function(res){dZIPM(N,I,J,res$pi,res$epsilon,res$mu,res$nu,t,log=TRUE)})
+  res <- replicate(starts,{
+    EM(N,t,tol=tol,update_t=update_t)})
+  d <- apply(res,2,function(res){dZIPM(N,I,J,res$pi,res$epsilon,res$mu,res$nu,res$t,log=TRUE)})
   return(res[,which.max(d)])
 }
 

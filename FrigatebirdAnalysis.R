@@ -53,11 +53,27 @@ names(plot_N)[2:5] <- c("August 2007","September 2008","October 2009","August 20
 rownames(plot_N) <- NULL
 print(xtable::xtable(plot_N,digits=0),include.rownames = FALSE)
 
+## APPENDIX C: Analysis in which we update t
+set.seed(1)
+res <- EM_multistart(N,t,tol=1e-6,starts=100,update_t=T)
+theta_hat <- res$theta
+tau_hat <- get_se(N=N,I=I,J=J,pi=res$pi,epsilon=res$epsilon,mu=res$mu,nu=res$nu,t=res$t)
+res_conf <- get_conf(theta_hat,tau_hat,I,J,alpha=0.05)
+
+data.frame(pi=round(res$pi,2),
+           epsilon=round(res$epsilon,2),
+           mu=round(res$mu,2),
+           nu=round(res$nu,2),
+           theta=paste0(round(res$theta,2)," (",
+                        round(res_conf[1],2),",",
+                        round(res_conf[2],2),")"))
+res$t
+
 ## Model Estimation
 set.seed(1)
-res <- EM_multistart(N,t,tol=1e-6,starts=1000)
+res <- EM_multistart(N,t,tol=1e-6,starts=1000,update_t=F)
 theta_hat <- res$theta
-tau_hat <- get_se(N=N,I=I,J=J,pi=res$pi,epsilon=res$epsilon,mu=res$mu,nu=res$nu,t=t)
+tau_hat <- get_se(N=N,I=I,J=J,pi=res$pi,epsilon=res$epsilon,mu=res$mu,nu=res$nu,t=res$t)
 res_conf <- get_conf(theta_hat,tau_hat,I,J,alpha=0.05)
 
 ## Table 3
@@ -68,6 +84,9 @@ results <- data.frame(pi=round(res$pi,2),
                       theta=paste0(round(res$theta,2)," (",
                                    round(res_conf[1],2),",",
                                    round(res_conf[2],2),")"))
+results
+res$t
+
 xtable::xtable(results)
 pander::pander(results,caption="Maximum likelihood estimates of parameters",
                style="rmarkdown")
